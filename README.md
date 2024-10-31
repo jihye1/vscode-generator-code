@@ -21,15 +21,3 @@ yo code
 ```
 
 ![The command generator](yocode.png)
-
-## Generator Output
-
-These templates will
-* Create a base folder structure
-* Template out a rough `package.json`
-* Import any assets required for your extension e.g. tmBundles or the VS Code Library
-* For Extensions: Set-up `launch.json` for running your extension and attaching to a process
-
-## License
-
-[MIT](LICENSE)
