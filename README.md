@@ -1,31 +1,53 @@
-# vscode-generator-code
-visual studio code generator
+# Yo Code - Extension and Customization Generator
 
-> A [Yeoman](http://yeoman.io) Generator for [Visual Studio Code](http://code.visualstudio.com)
+[![Build Status](https://dev.azure.com/ms/vscode-generator-code/_apis/build/status/Microsoft.vscode-generator-code)](https://dev.azure.com/ms/vscode-generator-code/_build/latest?definitionId=17)
 
-<img width="491" alt="generator-code" src="">
+We have written a Yeoman generator to help get you started. We plan to add templates for most extension/customization types into this.
 
-## Getting Started
+## Install the Generator
 
-To run Yeoman you will need to [install node](https://nodejs.org) for your platform. The setup will also install the [Node Package Manager](https://www.npmjs.com/) (npm) which you use to download Yeoman, generators, and many other software packages.
-
-It is recommended that you install Yeoman and generators globally using  the `npm -g` switch so that you can run the generator from any folder.
+Install Yeoman and the VS Code Extension generator:
 
 ```bash
 npm install -g yo generator-code
 ```
 
-Make a new directory and then cd into it.
+## Run Yo Code
+The Yeoman generator will walk you through the steps required to create your customization or extension prompting for the required information.
 
-```bash
-mkdir myApp && cd $_
-```
+To launch the generator simply type:
 
-Run the Code generator:
 ```bash
 yo code
 ```
 
-## License
+![The command generator](yocode.png)
 
-[MIT](LICENSE)
+## Generator Output
+
+These templates will
+* Create a base folder structure
+* Template out a rough `package.json`
+* Import any assets required for your extension e.g. tmBundles or the VS Code Library
+* For Extensions: Set-up `launch.json` for running your extension and attaching to a process
+
+## Run Generator using Docker
+If you don't want to install nodejs or any node packages, use this method to containerize the generator. \
+\
+Go into your project directory
+```bash
+cd <project directory>
+```
+Build the docker image from the docker file
+```bash
+docker build -t vscode-generator-code .
+```
+Create a docker container with volumes
+```bash
+docker run -v $(pwd):/usr/src/app vscode-generator-code
+```
+
+## History
+
+* 1.0.0: Generates a VS Code extension for TypeScript 2.0.3
+* 0.10.x: Generates a VS Code extension for TypeScript 1.8.10

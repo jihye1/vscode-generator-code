@@ -1,453 +1,210 @@
+/*---------------------------------------------------------
+ * Copyright (C) Microsoft Corporation. All rights reserved.
+ *--------------------------------------------------------*/
 'use strict';
 
-var yeoman = require('yeoman-generator');
-var yosay = require('yosay');
-var chalk = require('chalk');
+const Generator = require('yeoman-generator');
+const yosay = require('yosay');
 
-var path = require('path');
-var fs = require('fs');
-var request = require('request');
-var plistParser = require('./plistParser');
+const path = require('path');
+const env = require('./env');
 
-module.exports = yeoman.generators.Base.extend({
+const colortheme = require('./generate-colortheme');
+const commandjs = require('./generate-command-js');
+const commandts = require('./generate-command-ts ');
+const commandweb = require('./generate-command-web');
+const extensionpack = require('./generate-extensionpack');
+const keymap = require('./generate-keymap');
+const language = require('./generate-language');
+const localization = require('./generate-localization');
+const notebook = require('./generate-notebook-renderer');
+const snippets = require('./generate-snippets');
+const webupdate = require('./generate-web-update');
 
-  constructor: function () {
-    yeoman.generators.Base.apply(this, arguments);
+const extensionGenerators = [
+    commandts, commandjs, colortheme, language, snippets, keymap, extensionpack, localization,
+    commandweb, notebook, webupdate
+]
 
-    this.extensionConfig = Object.create(null);
-    this.extensionConfig.installDependencies = false;
-  },
+module.exports = class extends Generator {
 
-  initializing: {
+    constructor(args, opts) {
+        super(args, opts);
+        this.option('extensionType', { type: String, description: extensionGenerators.map(e => `'${e.id.substr(4)}'`).join(', ') });
+        this.option('extensionName', { type: String, description: 'Name of the extension' });
+        this.option('extensionDescription', { type: String, description: 'Description of the extension' });
+        this.option('extensionDisplayName', { type: String, description: 'Display name of the extension' });
 
-    // Welcome
-    welcome: function () {
-      this.log(yosay('Welcome to the Visual Studio Code Extension generator!'));
+        this.option('pkgManager', { type: String, description: `'npm' or 'yarn'`});
+        this.option('webpack', { type: Boolean, description: `Bundle the extension with webpack` });
+        this.option('gitInit', { type: Boolean, description: `Initialize a git repo` });
+
+        this.option('snippetFolder', { type: String, description: `Snippet folder location` });
+        this.option('snippetLanguage', { type: String, description: `Snippet language` });
+
+        this.option('insiders', { type: Boolean, alias: 'i' , description: `Show the insiders options for the generator`});
+
+        this.extensionConfig = Object.create(null);
+        this.extensionConfig.installDependencies = false;
+
+        this.extensionGenerator = undefined;
+
+        this.abort = false;
     }
-  },
 
-  prompting: {
+    async initializing() {
+        const cliArgs = this.options['_'];
+        this.extensionConfig.insiders = Array.isArray(cliArgs) && cliArgs.indexOf('insiders') !== -1 || !!this.options['insiders'];
 
-    // Ask for extension type
-    askForType: function () {
-      var done = this.async();
-      this.prompt({
-        type: 'list',
-        name: 'type',
-        message: 'What type of extension do you want to create?',
-        choices: [
-          {
-            name: 'New Color Theme',
-            value: 'ext-colortheme'
-          },
-          {
-            name: 'New Language Support',
-            value: 'ext-language'
-          }
-        ]
-      }, function (typeAnswer) {
-        this.extensionConfig.type = typeAnswer.type;
-        done();
-      }.bind(this));
-    },
-
-    askForThemeInfo: function () {
-      var done = this.async();
-      if (this.extensionConfig.type !== 'ext-colortheme') {
-        done();
-        return;
-      }
-      this.extensionConfig.isCustomization = true;
-
-      this.log("URL (http, https) or file name of the tmTheme file, e.g., http://www.monokai.nl/blog/wp-content/asdev/Monokai.tmTheme.")
-      this.prompt({
-        type: 'input',
-        name: 'themeURL',
-        message: 'URL or file name:'
-      }, function (urlAnswer) {
-        var location = urlAnswer.themeURL;
-
-        function processContent(extensionConfig, fileName, body) {
-          var themeNameMatch = body.match(/<key>name<\/key>\s*<string>([^<]*)/);
-          var themeName = themeNameMatch ? themeNameMatch[1] : '';
-
-          if (fileName && fileName.indexOf('.tmTheme') === -1) {
-            fileName = fileName + '.tmTheme';
-          }
-
-          if (!fileName) {
-            fileName = 'theme.tmTheme';
-          }
-
-          extensionConfig.themeFileName = fileName;
-          extensionConfig.themeContent = body;
-          extensionConfig.themeName = themeName;
-          extensionConfig.name = 'theme-' + themeName.toLowerCase().replace(/[^\w-]/, '');
-        };
-
-        if (location.match(/\w*:\/\//)) {
-          // load from url
-          request(location, function (error, response, body) {
-            if (!error && response.statusCode == 200) {
-              var contentDisposition = response.headers['content-disposition'];
-              var fileName = '';
-
-              if (contentDisposition) {
-                var fileNameMatch = contentDisposition.match(/filename="([^"]*)/);
-                if (fileNameMatch) {
-                  fileName = fileNameMatch[1];
-                }
-              }
-              if (!fileName) {
-                var lastSlash = location.lastIndexOf('/');
-                if (lastSlash) {
-                  fileName = location.substr(lastSlash + 1);
-                }
-              }
-
-              processContent(this.extensionConfig, fileName, body);
-            } else {
-              this.env.error("Problems loading theme: " + error);
-            }
-            done();
-          }.bind(this));
+        // Welcome
+        if (!this.extensionConfig.insiders) {
+            this.log(yosay('Welcome to the Visual Studio Code Extension generator!'));
         } else {
-          // load from disk
-          var body = null;
-          try {
-            body = fs.readFileSync(location);
-          } catch (error) {
-            this.env.error("Problems loading theme: " + error.message);
-          }
-          if (body) {
-            processContent(this.extensionConfig, path.basename(location), body.toString());
-          } else {
-            this.env.error("Problems loading theme: Not found");
-          }
-          done();
+            this.log(yosay('Welcome to the Visual Studio Code Insiders Extension generator!'));
         }
-      }.bind(this));
-    },
 
-    askForLanguageInfo: function () {
-      var done = this.async();
-      if (this.extensionConfig.type !== 'ext-language') {
-        done();
-        return;
-      }
-
-      this.extensionConfig.isCustomization = true;
-
-      this.log("URL (http, https) or file name of the tmLanguage file, e.g., http://raw.githubusercontent.com/textmate/ant.tmbundle/master/Syntaxes/Ant.tmLanguage.");
-      this.prompt({
-        type: 'input',
-        name: 'tmLanguageURL',
-        message: 'URL or file:',
-      }, function (urlAnswer) {
-        var location = urlAnswer.tmLanguageURL;
-
-        function processContent(extensionConfig, fileName, body) {
-          var result = plistParser.parse(body);
-          if (result.value) {
-            var languageInfo = result.value;
-
-            extensionConfig.languageName = languageInfo.name || '';
-
-            // evaluate language id
-            var languageId = '';
-
-            if (languageInfo.scopeName) {
-              extensionConfig.languageScopeName = languageInfo.scopeName;
-
-              var lastIndexOfDot = languageInfo.scopeName.lastIndexOf('.');
-              if (lastIndexOfDot) {
-                languageId = languageInfo.scopeName.substring(lastIndexOfDot + 1);
-              }
+        // evaluateEngineVersion
+        const dependencyVersions = await env.getDependencyVersions();
+        this.extensionConfig.dependencyVersions = dependencyVersions;
+        this.extensionConfig.dep = function (name) {
+            const version = dependencyVersions[name];
+            if (typeof version === 'undefined') {
+                throw new Error(`Module ${name} is not listed in env.js`);
             }
-            if (!languageId && fileName) {
-              var lastIndexOfDot2 = fileName.lastIndexOf('.');
-              if (lastIndexOfDot2 && fileName.substring(lastIndexOfDot2 + 1) == 'tmLanguage') {
-                languageId = fileName.substring(0, lastIndexOfDot2);
-              }
-            }
-            if (!languageId && languageInfo.name) {
-              languageId = languageInfo.name.toLowerCase().replace(/[^\w-_]/, '');
-            }
-            extensionConfig.languageId = languageId;
-            extensionConfig.name = languageId;
-
-            // evaluate file extensions
-            if (Array.isArray(languageInfo.fileTypes)) {
-              extensionConfig.languageExtensions = languageInfo.fileTypes.map(function (ft) { return '.' + ft; });
-            } else {
-              extensionConfig.languageExtensions = languageId ? ['.' + languageId] : [];
-            }
-          } else {
-            extensionConfig.languageId = '';
-            extensionConfig.languageName = '';
-            extensionConfig.languageScopeName = '';
-            extensionConfig.languageExtensions = [];
-          }
-          extensionConfig.languageContent = body;
+            return `${JSON.stringify(name)}: ${JSON.stringify(version)}`;
         };
+        this.extensionConfig.vsCodeEngine = await env.getLatestVSCodeVersion();
+    }
 
-        if (location.match(/\w*:\/\//)) {
-          // load from url
-          request(location, function (error, response, body) {
-            if (!error && response.statusCode == 200) {
-              var contentDisposition = response.headers['content-disposition'];
-              var fileName = '';
-              if (contentDisposition) {
-                var fileNameMatch = contentDisposition.match(/filename="([^"]*)/);
-                if (fileNameMatch) {
-                  fileName = fileNameMatch[1];
-                }
-              }
-              processContent(this.extensionConfig, fileName, body);
+    async prompting() {
+
+        // Ask for extension type
+        const extensionType = this.options['extensionType'];
+        if (extensionType) {
+            const extensionTypeId = 'ext-' + extensionType;
+            if (extensionGenerators.find(g => g.id === extensionTypeId)) {
+                this.extensionConfig.type = extensionTypeId;
             } else {
-              this.env.error("Problems loading language definition file: " + error.message);
+                this.log("Invalid extension type: " + extensionType + '\nPossible types are: ' + extensionGenerators.map(g => g.id.substr(4)).join(', '));
+                this.abort = true;
             }
-            done();
-          }.bind(this));
         } else {
-          // load from disk
-          var body = null;
-          try {
-            body = fs.readFileSync(location);
-          } catch (error) {
-            this.env.error("Problems loading language definition file: " + error.message);
-          }
-          if (body) {
-            processContent(this.extensionConfig, path.basename(location), body.toString());
-          } else {
-            this.env.error("Problems loading language definition file: Not found");
-          }
-          done();
+            const choices = [];
+            for (const g of extensionGenerators) {
+                const name = this.extensionConfig.insiders ? g.insidersName : g.name;
+                if (name) {
+                    choices.push({ name, value: g.id })
+                }
+            }
+            this.extensionConfig.type = (await this.prompt({
+                type: 'list',
+                name: 'type',
+                message: 'What type of extension do you want to create?',
+                pageSize: choices.length,
+                choices,
+            })).type;
+
         }
-      }.bind(this));
-    },
 
+        this.extensionGenerator = extensionGenerators.find(g => g.id === this.extensionConfig.type);
+        try {
+            await this.extensionGenerator.prompting(this, this.extensionConfig);
+        } catch (e) {
+            this.abort = true;
+        }
 
-    // Ask for extension name
-    askForExtensionName: function () {
-      var done = this.async();
-      this.prompt({
-        type: 'input',
-        name: 'name',
-        message: 'What\'s the name of your extension?',
-        default: this.extensionConfig.name
-      }, function (nameAnswer) {
-        this.extensionConfig.name = nameAnswer.name;
-        done();
-      }.bind(this));
-    },
-
-    // Ask to init Git - NOT USED currently
-    askForGit: function () {
-      var done = this.async();
-      if (this.extensionConfig.type === 'ext-colortheme' || this.extensionConfig.type === 'ext-language') {
-        done();
-        return;
-      }
-
-      this.prompt({
-        type: 'confirm',
-        name: 'gitInit',
-        message: 'Initialize a git repository?',
-        default: true
-      }, function (gitAnswer) {
-        this.extensionConfig.gitInit = gitAnswer.gitInit;
-        done();
-      }.bind(this));
-    },
-
-    askForThemeName: function () {
-      var done = this.async();
-      if (this.extensionConfig.type !== 'ext-colortheme') {
-        done();
-        return;
-      }
-
-      this.prompt({
-        type: 'input',
-        name: 'themeName',
-        message: 'What\'s the name of your theme shown to the user?',
-        default: this.extensionConfig.themeName,
-      }, function (nameAnswer) {
-        this.extensionConfig.themeName = nameAnswer.themeName;
-        done();
-      }.bind(this));
-    },
-
-    askForBaseTheme: function () {
-      var done = this.async();
-      if (this.extensionConfig.type !== 'ext-colortheme') {
-        done();
-        return;
-      }
-
-      this.prompt({
-        type: 'list',
-        name: 'themeBase',
-        message: 'Select a base theme:',
-        choices: [
-          {
-            name: "Dark",
-            value: "vs-dark"
-          },
-          {
-            name: "Light",
-            value: "vs"
-          }
-        ]
-      }, function (themeBase) {
-        this.extensionConfig.themeBase = themeBase.themeBase;
-        done();
-      }.bind(this));
     }
-  },
+    // Write files
+    writing() {
+        if (this.abort) {
+            return;
+        }
+        this.sourceRoot(path.join(__dirname, './templates/' + this.extensionConfig.type));
 
-  askForLanguageId: function () {
-    var done = this.async();
-    if (this.extensionConfig.type !== 'ext-language') {
-      done();
-      return;
+        return this.extensionGenerator.writing(this, this.extensionConfig);
     }
 
-    this.log('Verify the id of the language. The id is an identifier and is single, lower-case name such as \'php\', \'javascript\'');
-    this.prompt({
-      type: 'input',
-      name: 'languageId',
-      message: 'Detected languageId:',
-      default: this.extensionConfig.languageId,
-    }, function (idAnswer) {
-      this.extensionConfig.languageId = idAnswer.languageId;
-      done();
-    }.bind(this));
-  },
-
-  askForLanguageName: function () {
-    var done = this.async();
-    if (this.extensionConfig.type !== 'ext-language') {
-      done();
-      return;
+    // Installation
+    install() {
+        if (this.abort) {
+            return;
+        }
+        if (!this.extensionGenerator.update) {
+            process.chdir(this.extensionConfig.name);
+        }
+        if (this.extensionConfig.installDependencies) {
+            this.installDependencies({
+                yarn: this.extensionConfig.pkgManager === 'yarn',
+                npm: this.extensionConfig.pkgManager === 'npm',
+                bower: false
+            });
+        }
     }
 
-    this.log('Verify the name of the language. The name will be shown in the VS code editor mode selector.');
-    this.prompt({
-      type: 'input',
-      name: 'languageName',
-      message: 'Detected name:',
-      default: this.extensionConfig.languageName,
-    }, function (nameAnswer) {
-      this.extensionConfig.languageName = nameAnswer.languageName;
-      done();
-    }.bind(this));
-  },
+    // End
+    end() {
+        if (this.abort) {
+            return;
+        }
 
-  askForLanguageExtensions: function () {
-    var done = this.async();
-    if (this.extensionConfig.type !== 'ext-language') {
-      done();
-      return;
+        if (this.extensionGenerator.update) {
+            this.log('');
+            this.log('Your extension has been updated!');
+            this.log('');
+            this.log('To start editing with Visual Studio Code, use the following commands:');
+            this.log('');
+            if (!this.extensionConfig.insiders) {
+                this.log('     code .');
+            } else {
+                this.log('     code-insiders .');
+            }
+            this.log(`     ${this.extensionConfig.pkgManager} run compile-web`);
+            this.log('');
+            return;
+        }
+
+        // Git init
+        if (this.extensionConfig.gitInit) {
+            this.spawnCommand('git', ['init', '--quiet']);
+        }
+
+        if (this.extensionConfig.proposedAPI) {
+            this.spawnCommand(this.extensionConfig.pkgManager, ['run', 'update-proposed-api']);
+        }
+        this.log('');
+
+        if (!this.extensionConfig.insiders) {
+            this.log('Your extension ' + this.extensionConfig.name + ' has been created!');
+            this.log('');
+            this.log('To start editing with Visual Studio Code, use the following commands:');
+            this.log('');
+            this.log('     cd ' + this.extensionConfig.name);
+            this.log('     code .');
+            this.log('');
+            this.log('Open vsc-extension-quickstart.md inside the new extension for further instructions');
+            this.log('on how to modify, test and publish your extension.');
+        } else {
+            this.log('Your extension ' + this.extensionConfig.name + ' has been created!');
+            this.log('');
+            this.log('To start editing with Visual Studio Code, use the following commands:');
+            this.log('');
+            this.log('     cd ' + this.extensionConfig.name);
+            this.log('     code-insiders .');
+            this.log('');
+            this.log('Open vsc-extension-quickstart.md inside the new extension for further instructions');
+            this.log('on how to modify and test your extension.');
+        }
+        this.log('');
+
+        if (this.extensionGenerator.endMessage) {
+            this.extensionGenerator.endMessage(this, this.extensionConfig);
+        }
+
+        this.log('For more information, also visit http://code.visualstudio.com and follow us @code.');
+        this.log('\r\n');
+
+        if (this.extensionConfig.insiders) {
+            this.spawnCommand('code-insiders', [this.destinationPath(this.extensionConfig.name)]);
+        }
     }
-
-    this.log('Verify the file extensions of the language. Use commas to separate multiple entries (e.g. .ruby, .rb)');
-    this.prompt({
-      type: 'input',
-      name: 'languageExtensions',
-      message: 'Detected file extensions:',
-      default: this.extensionConfig.languageExtensions.join(', '),
-    }, function (extAnswer) {
-      this.extensionConfig.languageExtensions = extAnswer.languageExtensions.split(',').map(function (e) { return e.trim(); });
-      done();
-    }.bind(this));
-  },
-
-  // Write files
-  writing: function () {
-    this.sourceRoot(path.join(__dirname, './templates/' + this.extensionConfig.type));
-
-    switch (this.extensionConfig.type) {
-      case 'ext-colortheme':
-        this._writingColorTheme();
-        break;
-      case 'ext-language':
-        this._writingLanguage();
-        break;
-      default:
-        //unknown project type
-        break;
-    }
-  },
-
-  // Write Color Theme Extension
-  _writingColorTheme: function () {
-    var context = {
-      name: this.extensionConfig.name,
-      themeName: this.extensionConfig.themeName,
-      themeBase: this.extensionConfig.themeBase,
-      themeContent: this.extensionConfig.themeContent,
-      themeFileName: this.extensionConfig.themeFileName
-    };
-
-    this.template(this.sourceRoot() + '/package.json', context.name + '/package.json', context);
-    //this.directory(this.sourceRoot() + '/.vscode', context.name + '/.vscode');
-    this.template(this.sourceRoot() + '/themes/theme.tmTheme', context.name + '/themes/' + context.themeFileName, context);
-  },
-
-  // Write Language Extension
-  _writingLanguage: function () {
-    var context = {
-      name: this.extensionConfig.name,
-      languageId: this.extensionConfig.languageId,
-      languageName: this.extensionConfig.languageName,
-      languageExtensions: this.extensionConfig.languageExtensions,
-      languageScopeName: this.extensionConfig.languageScopeName,
-      languageContent: this.extensionConfig.languageContent
-    };
-
-    this.template(this.sourceRoot() + '/package.json', context.name + '/package.json', context);
-    //this.directory(this.sourceRoot() + '/.vscode', context.name + '/.vscode');
-    this.template(this.sourceRoot() + '/syntaxes/language.tmLanguage', context.name + '/syntaxes/' + context.languageId + '.tmLanguage', context);
-  },
-
-  // Installation
-  install: function () {
-    process.chdir(this.extensionConfig.name);
-
-    if (this.extensionConfig.installDependencies) {
-      this.installDependencies({
-        npm: true,
-        bower: false
-      });
-    }
-  },
-
-  // End
-  end: function () {
-
-    // Git init
-    if (this.extensionConfig.gitInit) {
-      this.spawnCommand('git', ['init', '--quiet']);
-    }
-
-    this.log('');
-    if (this.extensionConfig.isCustomization) {
-      this.log('Your extension ' + this.extensionConfig.name + ' has been created!');
-      this.log('');
-      this.log('To start using it with Visual Studio Code copy it into the .vscode/extensions folder and restart Code.');
-    } else {
-      this.log('Your extension ' + this.extensionConfig.name + ' has been created!');
-      this.log('');
-      this.log('To start editing with Visual Studio Code, use the following commands:');
-      this.log('');
-      this.log('     cd ' + this.extensionConfig.name);
-      this.log('     code .');
-    }
-    this.log('');
-    this.log('For more information, visit http://code.visualstudio.com and follow us @code.');
-    this.log('\r\n');
-  }
-
-});
+}

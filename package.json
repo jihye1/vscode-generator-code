@@ -1,6 +1,6 @@
 {
   "name": "generator-code",
-  "version": "0.1.0",
+  "version": "1.3.8",
   "description": "Yeoman generator for Visual Studio Code Extensions",
   "keywords": [
     "yeoman-generator",
@@ -10,7 +10,14 @@
     "vs code",
     "extensions"
   ],
-  "repository": "microsoft/vscode-generator-code",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Microsoft/vscode-generator-code.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Microsoft/vscode-generator-code/issues"
+  },
+  "main": "./generators/app/index.js",
   "homepage": "http://code.visualstudio.com",
   "license": "MIT",
   "author": {
@@ -18,13 +25,33 @@
     "url": "https://github.com/Microsoft"
   },
   "engines": {
-    "node": ">=0.10.0"
+    "node": ">=10.0.0"
+  },
+  "scripts": {
+    "test": "mocha",
+    "prepublish": "npm test",
+    "preversion": "npm test",
+    "postversion": "git push && git push --tags"
   },
   "dependencies": {
-    "yeoman-generator": "^0.20.3",
-    "yosay": "^1.0.5",
-    "chalk": "^1.1.1",
-    "request": "^2.61.0",
-    "sax": "^1.1.3"
+    "assert-plus": "^1.0.0",
+    "cd": "^0.3.3",
+    "chalk": "^4.1.0",
+    "fast-plist": "^0.1.2",
+    "kind-of": "6.0.3",
+    "request-light": "^0.4.0",
+    "sanitize-filename": "^1.6.3",
+    "sax": "^1.2.4",
+    "yeoman-generator": "^4.12.0",
+    "yosay": "^2.0.2"
+  },
+  "devDependencies": {
+    "@types/mocha": "^8.0.4",
+    "@types/node": "^14.14.10",
+    "@types/yeoman-generator": "^4.11.3",
+    "mocha": "^8.2.1",
+    "yeoman-assert": "^3.1.1",
+    "yeoman-test": "^3.0.0",
+    "yo": "^3.1.1"
   }
 }
